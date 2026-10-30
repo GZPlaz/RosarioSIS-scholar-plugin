@@ -9,14 +9,15 @@
  * @package Scholar plugin
  */
 
-define( 'SCHOLAR_PLUGIN_VERSION', '1.0.0' );
+define( 'SCHOLAR_PLUGIN_VERSION', '1.0.1' );
 
-require_once 'plugins/Scholar/includes/Client.php';
-require_once 'plugins/Scholar/includes/Settings.fnc.php';
-require_once 'plugins/Scholar/includes/Courses.fnc.php';
-require_once 'plugins/Scholar/includes/Grades.fnc.php';
-require_once 'plugins/Scholar/includes/Year.fnc.php';
-require_once 'plugins/Scholar/includes/Sync.fnc.php';
+// The plugin works from any folder name (RosarioSIS names a plugin after its folder).
+require_once __DIR__ . '/includes/Client.php';
+require_once __DIR__ . '/includes/Settings.fnc.php';
+require_once __DIR__ . '/includes/Courses.fnc.php';
+require_once __DIR__ . '/includes/Grades.fnc.php';
+require_once __DIR__ . '/includes/Year.fnc.php';
+require_once __DIR__ . '/includes/Sync.fnc.php';
 
 /**
  * Run plugin work from a hook without ever breaking the RosarioSIS page.

@@ -14,7 +14,7 @@ Requires RosarioSIS 11.0 or later and PHP 7.4+ with the curl and json extensions
 
 ## Installation
 
-1. Download this repository and put it in the RosarioSIS `plugins/` folder as **`plugins/Scholar`**. The folder must be named exactly `Scholar`, not `RosarioSIS-scholar-plugin-main`.
+1. Download this repository and put it in the RosarioSIS `plugins/` folder, for example as `plugins/Scholar`. Any folder name works except one ending in `-main` or `-master`, which RosarioSIS refuses: rename a folder unpacked from a GitHub ZIP (`RosarioSIS-scholar-plugin-main`).
 
    ```bash
    cd /path/to/rosariosis/plugins
@@ -83,7 +83,7 @@ Background syncs run after the page has been sent, so nobody waits for them. Onl
 To keep grades current at night and during holidays, add a cron job on the RosarioSIS server. The **Settings** screen shows the exact line:
 
 ```cron
-*/15 * * * * php /path/to/rosariosis/plugins/Scholar/cron.php
+*/15 * * * * php /path/to/rosariosis/plugins/<plugin folder>/cron.php
 ```
 
 Run it as the web server user, for example in `crontab -u www-data -e`. If you can only use a web scheduler, click **Enable the web cron address** under Settings and call the URL it shows. The URL contains a secret key; requests without that key get `403 Forbidden`.

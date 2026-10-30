@@ -3,9 +3,9 @@
  * Scholar plugin: scheduled sync.
  *
  * Command line (recommended), from any folder:
- *     php /path/to/rosariosis/plugins/Scholar/cron.php
+ *     php /path/to/rosariosis/plugins/<plugin folder>/cron.php
  * or from a web scheduler, once a web cron key is enabled in the plugin settings:
- *     https://your-rosariosis/plugins/Scholar/cron.php?key=…
+ *     https://your-rosariosis/plugins/<plugin folder>/cron.php?key=…
  *
  * @package Scholar plugin
  */
@@ -20,9 +20,9 @@ if ( $scholar_cli )
 	// Minimal server variables RosarioSIS expects from a web request.
 	$_SERVER += [
 		'HTTP_HOST' => 'localhost',
-		'SCRIPT_NAME' => '/plugins/Scholar/cron.php',
-		'PHP_SELF' => '/plugins/Scholar/cron.php',
-		'REQUEST_URI' => '/plugins/Scholar/cron.php',
+		'SCRIPT_NAME' => '/plugins/' . basename( __DIR__ ) . '/cron.php',
+		'PHP_SELF' => '/plugins/' . basename( __DIR__ ) . '/cron.php',
+		'REQUEST_URI' => '/plugins/' . basename( __DIR__ ) . '/cron.php',
 		'REMOTE_ADDR' => '127.0.0.1',
 		'HTTP_USER_AGENT' => 'cron',
 	];
@@ -36,7 +36,7 @@ require_once 'Warehouse.php';
 
 header( 'Content-Type: text/plain; charset=UTF-8' );
 
-if ( empty( $RosarioPlugins['Scholar'] ) || ! function_exists( 'ScholarSyncAll' ) )
+if ( empty( $RosarioPlugins[ basename( __DIR__ ) ] ) || ! function_exists( 'ScholarSyncAll' ) )
 {
 	http_response_code( 503 );
 

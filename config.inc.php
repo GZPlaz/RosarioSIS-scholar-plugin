@@ -10,7 +10,7 @@
 
 // Check the script is called by the right program & plugin is activated.
 if ( $_REQUEST['modname'] !== 'School_Setup/Configuration.php'
-	|| empty( $RosarioPlugins['Scholar'] )
+	|| empty( $RosarioPlugins[ basename( __DIR__ ) ] )
 	|| $_REQUEST['modfunc'] !== 'config' )
 {
 	$error[] = _( 'You\'re not allowed to use this program!' );
@@ -23,7 +23,7 @@ $error = isset( $error ) ? (array) $error : [];
 $warning = isset( $warning ) ? (array) $warning : [];
 $note = isset( $note ) ? (array) $note : [];
 
-$scholar_base_url = 'Modules.php?modname=' . $_REQUEST['modname'] . '&tab=plugins&modfunc=config&plugin=Scholar';
+$scholar_base_url = 'Modules.php?modname=' . $_REQUEST['modname'] . '&tab=plugins&modfunc=config&plugin=' . rawurlencode( basename( __DIR__ ) );
 
 $scholar_section = isset( $_REQUEST['section'] ) && in_array( $_REQUEST['section'], [ 'courses', 'settings', 'log' ] ) ?
 	$_REQUEST['section'] : ( ScholarConfigured() ? 'courses' : 'settings' );
@@ -396,14 +396,14 @@ function _scholarSettingsSection( $base_url )
 
 	echo '<p>To sync even when nobody uses RosarioSIS (nights, holidays), add a cron job on the server, from the RosarioSIS folder:</p>';
 
-	echo '<pre>*/' . max( 5, $minutes ) . ' * * * * php ' . htmlspecialchars( realpath( 'plugins/Scholar/cron.php' ) ) . '</pre>';
+	echo '<pre>*/' . max( 5, $minutes ) . ' * * * * php ' . htmlspecialchars( __DIR__ . '/cron.php' ) . '</pre>';
 
 	$key = ScholarSetting( 'CRON_KEY' );
 
 	if ( $key )
 	{
 		$cron_url = ( isset( $_SERVER['HTTPS'] ) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://' ) .
-			$_SERVER['HTTP_HOST'] . dirname( $_SERVER['SCRIPT_NAME'] ) . '/plugins/Scholar/cron.php?key=' . $key;
+			$_SERVER['HTTP_HOST'] . rtrim( dirname( $_SERVER['SCRIPT_NAME'] ), '/\\' ) . '/plugins/' . rawurlencode( basename( __DIR__ ) ) . '/cron.php?key=' . $key;
 
 		echo '<p>Or call this address from any scheduler: <code>' . htmlspecialchars( rtrim( $cron_url, '/' ) ) . '</code></p>';
 	}
