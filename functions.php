@@ -9,7 +9,7 @@
  * @package Scholar plugin
  */
 
-define( 'SCHOLAR_PLUGIN_VERSION', '1.0.1' );
+define( 'SCHOLAR_PLUGIN_VERSION', '1.1.0' );
 
 // The plugin works from any folder name (RosarioSIS names a plugin after its folder).
 require_once __DIR__ . '/includes/Client.php';

@@ -3,14 +3,14 @@
 Connects [RosarioSIS](https://www.rosariosis.org) to [Scholar](https://github.com/GZPlaz/scholar-system_ynh), the testing and mastery platform of MindAccel University.
 
 - **Create and link courses.** Each RosarioSIS course period can be created in Scholar, or linked to a course that already exists there. New course periods can be created and linked automatically.
-- **Linking sets the course up.** The teacher and every scheduled student are added to the Scholar course. Accounts are created if needed. The teacher gets a "Scholar tests" category in their gradebook.
+- **Linking sets the course up.** The teacher and every scheduled student are added to the Scholar course, and the teacher gets a "Scholar tests" category in their gradebook. Students get no account or password: they take tests in Scholar's test portal with the test code and their RosarioSIS student ID.
 - **Test grades flow into the gradebook by themselves.** Every Scholar test with results becomes a gradebook assignment, and each student's score is written as their grade. Rosters and grades are refreshed in the background.
 - **A new school year cleans up after itself.** When the default school year moves forward:
   - last year's Scholar courses are archived, and their results are kept;
   - the rolled-over course periods are linked to fresh Scholar courses and set up;
-  - Scholar accounts of students who left are deactivated.
+  - students who left are deactivated in Scholar.
 
-Requires RosarioSIS 11.0 or later and PHP 7.4+ with the curl and json extensions, on PostgreSQL or MySQL. Scholar must be version 1.2.0 or later.
+Requires RosarioSIS 11.0 or later and PHP 7.4+ with the curl and json extensions, on PostgreSQL or MySQL. Scholar must be version 1.3.0 or later (the version with the student test portal).
 
 ## Installation
 
@@ -25,17 +25,17 @@ Requires RosarioSIS 11.0 or later and PHP 7.4+ with the curl and json extensions
 3. In Scholar, open **Administration › Integrations**, create a token named "RosarioSIS" and copy it. It is shown only once.
 4. Back in RosarioSIS, click **Configuration** next to the Scholar plugin. Under **Settings**, enter Scholar's address (for example `https://apps.mindaccel.org/scholar`) and the token, then click **Test the connection**.
 
-If the test says Scholar answered with the YunoHost portal, the `api` permission of the Scholar app is missing. Upgrade Scholar to 1.2.0 or later: the upgrade creates that permission. It lets server-to-server calls reach Scholar without a portal sign-in, and every call still needs the token.
+If the test says Scholar answered with the YunoHost portal, the `api` permission of the Scholar app is missing. Upgrade Scholar to 1.3.0 or later: the upgrade creates that permission. It lets server-to-server calls reach Scholar without a portal sign-in, and every call still needs the token.
 
 ## Settings
 
 | Setting | What it does |
 |---|---|
 | Scholar address, API token | Where Scholar is and how to sign in to it. Leave the token empty to keep the saved one. |
-| Accounts created in Scholar | **YunoHost accounts**: students and teachers sign in to Scholar with the YunoHost account that has the same username as in RosarioSIS. **Local Scholar accounts**: Scholar makes a temporary password, which the plugin shows once, right after the account is created. |
+| Teacher accounts created in Scholar | **YunoHost accounts**: teachers sign in to Scholar with the YunoHost account that has the same username as in RosarioSIS. **Local Scholar accounts**: Scholar makes a temporary password, which the plugin shows once, right after the account is created. Students never get an account: their RosarioSIS student ID is what they type in Scholar's test portal (`/test/`). |
 | Create and link every new course period | When on, every course period created in **Scheduling › Courses** is created in Scholar and set up at once. |
 | At a new default school year, link the rolled-over course periods | When on, course periods rolled over from a linked course period get their own new Scholar course. |
-| At a new default school year, deactivate leavers | When on, Scholar accounts of students not enrolled in the new year are deactivated. Their results stay in Scholar. An account is reactivated if the student comes back. |
+| At a new default school year, deactivate leavers | When on, students not enrolled in the new year are deactivated in Scholar and can no longer enter the test portal. Their results stay in Scholar. A student is reactivated if they come back. |
 | Sync every (minutes) | The most often the background sync runs. The default is 15. |
 | Gradebook category | The name of the assignment category the plugin adds to each linked teacher's gradebook. |
 | ID prefix | Scholar records are tagged `rosario:student:42`, `rosario:staff:jdoe` and `rosario:cp:7`. Change the prefix only if two RosarioSIS sites share one Scholar, and only before linking anything. |

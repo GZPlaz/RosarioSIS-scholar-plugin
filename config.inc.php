@@ -259,8 +259,8 @@ if ( $scholar_created_accounts )
 	ListOutput(
 		$scholar_created_accounts,
 		[ 'USERNAME' => _( 'Username' ), 'ROLE' => _( 'Profile' ), 'TEMPORARY_PASSWORD' => _( 'Password' ) ],
-		'New Scholar account (give this password to its owner; it must be changed at first sign-in)',
-		'New Scholar accounts (give each password to its owner; it must be changed at first sign-in)',
+		'New Scholar teacher account (give this password to its owner; it must be changed at first sign-in)',
+		'New Scholar teacher accounts (give each password to its owner; it must be changed at first sign-in)',
 		[],
 		[],
 		[ 'search' => false, 'save' => true ]
@@ -313,7 +313,7 @@ function _scholarSettingsSection( $base_url )
 	echo '<tr><td>' . SelectInput(
 		ScholarSetting( 'ACCOUNT_TYPE' ),
 		'scholar[ACCOUNT_TYPE]',
-		'Accounts created in Scholar',
+		'Teacher accounts created in Scholar',
 		[
 			'ldap' => 'YunoHost accounts (same username and password as YunoHost)',
 			'local' => 'Local Scholar accounts (temporary password shown once)',
@@ -342,7 +342,7 @@ function _scholarSettingsSection( $base_url )
 	echo '<tr><td>' . CheckboxInput(
 		ScholarSetting( 'DEACTIVATE_LEAVERS' ) === 'Y' ? 'Y' : '',
 		'scholar[DEACTIVATE_LEAVERS]',
-		'At a new default school year, deactivate the Scholar accounts of students who are no longer enrolled',
+		'At a new default school year, deactivate the Scholar records of students who are no longer enrolled',
 		'',
 		true
 	) . '</td></tr>';
