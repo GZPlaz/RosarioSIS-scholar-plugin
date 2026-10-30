@@ -32,7 +32,7 @@ If the test says Scholar answered with the YunoHost portal, the `api` permission
 | Setting | What it does |
 |---|---|
 | Scholar address, API token | Where Scholar is and how to sign in to it. Leave the token empty to keep the saved one. |
-| Teacher accounts created in Scholar | **YunoHost accounts**: teachers sign in to Scholar with the YunoHost account that has the same username as in RosarioSIS. **Local Scholar accounts**: Scholar makes a temporary password, which the plugin shows once, right after the account is created. Students never get an account: their RosarioSIS student ID is what they type in Scholar's test portal (`/test/`). |
+| Teacher accounts created in Scholar | **YunoHost accounts**: teachers sign in to Scholar with the YunoHost account that has the same username as in RosarioSIS. **Local Scholar accounts**: Scholar makes a temporary password, which the plugin shows once, right after the account is created. Students never get an account: their RosarioSIS student ID is what they type in Scholar's test portal (Scholar's front page). |
 | Create and link every new course period | When on, every course period created in **Scheduling › Courses** is created in Scholar and set up at once. |
 | At a new default school year, link the rolled-over course periods | When on, course periods rolled over from a linked course period get their own new Scholar course. |
 | At a new default school year, deactivate leavers | When on, students not enrolled in the new year are deactivated in Scholar and can no longer enter the test portal. Their results stay in Scholar. A student is reactivated if they come back. |
