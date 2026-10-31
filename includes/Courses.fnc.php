@@ -73,6 +73,174 @@ function ScholarCoursePayload( $cp )
 }
 
 /**
+ * Every course in Scholar (archived ones too), read once per request.
+ *
+ * @throws ScholarApiException
+ */
+function ScholarScholarCourses( $refresh = false )
+{
+	static $courses = null;
+
+	if ( $courses === null || $refresh )
+	{
+		$list = ScholarApi()->get( 'courses?include_archived=1' );
+
+		$courses = (array) $list['courses'];
+	}
+
+	return $courses;
+}
+
+function ScholarNormalizeCode( $code )
+{
+	return mb_strtolower( preg_replace( '/\s+/u', ' ', trim( (string) $code ) ) );
+}
+
+/**
+ * Is a Scholar course free to be linked to a course period? It is when it carries no tag from a
+ * connected system, or a tag of this plugin that points to a course period that no longer exists
+ * here (a RosarioSIS that was reinstalled or reset).
+ */
+function ScholarCourseIsFree( $course )
+{
+	if ( empty( $course['external_id'] ) )
+	{
+		return true;
+	}
+
+	$prefix = ScholarIdPrefix() . ':cp:';
+
+	if ( strpos( $course['external_id'], $prefix ) !== 0 )
+	{
+		return false; // belongs to another system
+	}
+
+	$other = substr( $course['external_id'], strlen( $prefix ) );
+
+	return ! ctype_digit( $other )
+		|| ! DBGetOne( "SELECT 1 FROM course_periods WHERE COURSE_PERIOD_ID='" . (int) $other . "'" );
+}
+
+/**
+ * The Scholar course that already exists for a course period, if there is a sure one:
+ * 1. a course tagged with this course period's id ("rosario:cp:7"), or
+ * 2. a free, not archived course with the very code the plugin would give a new one
+ *    (course short name, a dash, course period short name: "G121-1st G121").
+ *
+ * @param array      $cp      Course period (ScholarCoursePeriod()).
+ * @param array|null $courses Scholar courses (default: all).
+ *
+ * @return array|false [ 'id' => Scholar course id, 'how' => 'tag'|'code' ]
+ */
+function ScholarFindExisting( $cp, $courses = null )
+{
+	$courses = $courses === null ? ScholarScholarCourses() : $courses;
+
+	$expected = ScholarCourseExternalId( $cp['COURSE_PERIOD_ID'] );
+
+	foreach ( $courses as $course )
+	{
+		if ( $course['external_id'] === $expected )
+		{
+			return [ 'id' => (int) $course['id'], 'how' => 'tag' ];
+		}
+	}
+
+	$payload = ScholarCoursePayload( $cp );
+
+	$want = ScholarNormalizeCode( $payload['code'] );
+
+	$found = [];
+
+	foreach ( $courses as $course )
+	{
+		if ( empty( $course['archived'] )
+			&& ScholarNormalizeCode( $course['code'] ) === $want
+			&& ScholarCourseIsFree( $course ) )
+		{
+			$found[] = (int) $course['id'];
+		}
+	}
+
+	return count( $found ) === 1 ? [ 'id' => $found[0], 'how' => 'code' ] : false;
+}
+
+/**
+ * Link every unlinked course period (default school year, or the given one) to the Scholar course
+ * that already exists for it. Course periods whose match is ambiguous (two course periods
+ * wanting one Scholar course) are left for a person to decide.
+ *
+ * @throws ScholarApiException
+ *
+ * @return array [ 'linked' => n, 'ambiguous' => n, 'accounts' => roster results ]
+ */
+function ScholarAdoptExisting( $syear = null )
+{
+	$result = [ 'linked' => 0, 'ambiguous' => 0, 'accounts' => [] ];
+
+	$unlinked = DBGet( "SELECT cp.COURSE_PERIOD_ID
+		FROM course_periods cp
+		LEFT JOIN scholar_links l ON l.COURSE_PERIOD_ID=cp.COURSE_PERIOD_ID
+		WHERE l.COURSE_PERIOD_ID IS NULL
+		AND cp.SYEAR='" . (int) ( $syear ? $syear : ScholarDefaultSyear() ) . "'
+		ORDER BY cp.COURSE_PERIOD_ID" );
+
+	if ( ! $unlinked )
+	{
+		return $result;
+	}
+
+	$courses = ScholarScholarCourses( true );
+
+	$wanted = [];
+
+	foreach ( $unlinked as $row )
+	{
+		$cp = ScholarCoursePeriod( $row['COURSE_PERIOD_ID'] );
+
+		$match = $cp ? ScholarFindExisting( $cp, $courses ) : false;
+
+		if ( $match )
+		{
+			$wanted[ $match['id'] ][] = (int) $row['COURSE_PERIOD_ID'];
+		}
+	}
+
+	foreach ( $wanted as $scholar_course_id => $course_periods )
+	{
+		if ( count( $course_periods ) > 1 )
+		{
+			$result['ambiguous'] += count( $course_periods );
+
+			continue;
+		}
+
+		try
+		{
+			$result['accounts'][] = ScholarLink( $course_periods[0], $scholar_course_id );
+
+			$result['linked']++;
+		}
+		catch ( ScholarApiException $e )
+		{
+			if ( $e->status === 0 || $e->status === 401 )
+			{
+				throw $e;
+			}
+
+			ScholarLog( 'error', 'Linking course period ' . $course_periods[0] . ' to existing Scholar course ' . $scholar_course_id . ': ' . $e->getMessage() );
+		}
+	}
+
+	if ( $result['linked'] )
+	{
+		ScholarLog( 'info', 'Found ' . $result['linked'] . ' existing Scholar course(s) for course periods and linked them.' );
+	}
+
+	return $result;
+}
+
+/**
  * Link a course period to Scholar and set it up.
  *
  * @param int      $course_period_id  Course period.
@@ -104,8 +272,21 @@ function ScholarLink( $course_period_id, $scholar_course_id = null )
 	}
 	else
 	{
-		// Idempotent: Scholar returns the existing course if this external id is already there.
-		$course = $api->post( 'courses', $payload );
+		// A course that already exists for this course period is linked, not duplicated.
+		$existing_course = ScholarSetting( 'MATCH_EXISTING' ) !== 'N' ? ScholarFindExisting( $cp ) : false;
+
+		if ( $existing_course )
+		{
+			$course = $api->patch( 'courses/' . (int) $existing_course['id'], [
+				'external_id' => $payload['external_id'],
+				'archived' => false,
+			] );
+		}
+		else
+		{
+			// Idempotent: Scholar returns the existing course if this external id is already there.
+			$course = $api->post( 'courses', $payload );
+		}
 	}
 
 	$scholar_course_id = (int) $course['course']['id'];

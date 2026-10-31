@@ -9,7 +9,7 @@
  * @package Scholar plugin
  */
 
-define( 'SCHOLAR_PLUGIN_VERSION', '2.0.0' );
+define( 'SCHOLAR_PLUGIN_VERSION', '2.1.0' );
 
 // The most often the plugin asks Scholar for missed changes (the webhook normally makes this unnecessary).
 define( 'SCHOLAR_POLL_SECONDS', 60 );

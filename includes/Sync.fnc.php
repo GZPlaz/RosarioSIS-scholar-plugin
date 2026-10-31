@@ -39,6 +39,18 @@ function ScholarSyncAll()
 	{
 		ScholarCheckYearChange();
 
+		if ( ScholarSetting( 'MATCH_EXISTING' ) !== 'N' )
+		{
+			try
+			{
+				ScholarAdoptExisting();
+			}
+			catch ( ScholarApiException $e )
+			{
+				ScholarLog( 'error', 'Looking for existing Scholar courses: ' . $e->getMessage() );
+			}
+		}
+
 		$links = DBGet( "SELECT COURSE_PERIOD_ID
 			FROM scholar_links
 			WHERE STATUS='active'

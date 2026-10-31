@@ -25,6 +25,7 @@ function ScholarSetting( $key, $value = null )
 		'TOKEN' => '',
 		'ACCOUNT_TYPE' => 'ldap', // ldap = YunoHost accounts; local = Scholar passwords
 		'AUTO_LINK' => '', // Y = create & link every new course period
+		'MATCH_EXISTING' => 'Y', // Y = link course periods to Scholar courses that already exist for them
 		'CARRY_OVER' => 'Y', // Y = at a new default school year, link rolled-over course periods again
 		'DEACTIVATE_LEAVERS' => 'Y', // Y = at a new default school year, deactivate students who left
 		'SYNC_MINUTES' => '15',

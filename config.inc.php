@@ -85,7 +85,7 @@ if ( $scholar_action && AllowEdit() )
 					ScholarSetting( 'ACCOUNT_TYPE', $posted['ACCOUNT_TYPE'] === 'local' ? 'local' : 'ldap' );
 				}
 
-				foreach ( [ 'AUTO_LINK', 'CARRY_OVER', 'DEACTIVATE_LEAVERS' ] as $flag )
+				foreach ( [ 'AUTO_LINK', 'MATCH_EXISTING', 'CARRY_OVER', 'DEACTIVATE_LEAVERS' ] as $flag )
 				{
 					if ( isset( $posted[ $flag ] ) )
 					{
@@ -184,6 +184,34 @@ if ( $scholar_action && AllowEdit() )
 				_scholarCollectAccounts( ScholarLink( $cp_id ), $scholar_created_accounts );
 
 				$note[] = button( 'check' ) . '&nbsp;Course created in Scholar, linked and set up.';
+
+				break;
+
+			case 'match_all':
+
+				$found = ScholarAdoptExisting( UserSyear() );
+
+				foreach ( $found['accounts'] as $roster )
+				{
+					_scholarCollectAccounts( $roster, $scholar_created_accounts );
+				}
+
+				if ( $found['linked'] )
+				{
+					$note[] = button( 'check' ) . '&nbsp;Linked ' . (int) $found['linked'] .
+						' course period(s) to the Scholar courses that already existed for them, and set them up.';
+				}
+				else
+				{
+					$warning[] = 'No existing Scholar course matched an unlinked course period. A course matches when it is tagged with the ' .
+						'course period (' . htmlspecialchars( ScholarCourseExternalId( 123 ) ) . ' style) or has the code the plugin would give it ' .
+						'(course short name, a dash, course period short name). Pick one by hand in the list below.';
+				}
+
+				if ( $found['ambiguous'] )
+				{
+					$warning[] = (int) $found['ambiguous'] . ' course period(s) share one Scholar course, so none of them was linked. Choose by hand.';
+				}
 
 				break;
 
@@ -381,6 +409,14 @@ function _scholarSettingsSection( $base_url )
 	) . '</td></tr>';
 
 	echo '<tr><td>' . CheckboxInput(
+		ScholarSetting( 'MATCH_EXISTING' ) !== 'N' ? 'Y' : '',
+		'scholar[MATCH_EXISTING]',
+		'Link course periods to the Scholar courses that already exist for them (same tag, or same code such as G121-1st G121), instead of making new ones',
+		'',
+		true
+	) . '</td></tr>';
+
+	echo '<tr><td>' . CheckboxInput(
 		ScholarSetting( 'CARRY_OVER' ) === 'Y' ? 'Y' : '',
 		'scholar[CARRY_OVER]',
 		'At a new default school year, link the rolled-over course periods to new Scholar courses',
@@ -500,14 +536,15 @@ function _scholarSettingsSection( $base_url )
 function _scholarCoursesSection( $base_url )
 {
 	$scholar_courses = [];
+	$all_scholar_courses = [];
 
 	try
 	{
-		$list = ScholarApi()->get( 'courses' );
+		$all_scholar_courses = ScholarScholarCourses();
 
-		foreach ( (array) $list['courses'] as $course )
+		foreach ( $all_scholar_courses as $course )
 		{
-			if ( empty( $course['external_id'] ) )
+			if ( empty( $course['archived'] ) && ScholarCourseIsFree( $course ) )
 			{
 				$scholar_courses[ $course['id'] ] = $course['code'] . ' — ' . $course['title'] .
 					( $course['term'] ? ' (' . $course['term'] . ')' : '' );
@@ -568,9 +605,25 @@ function _scholarCoursesSection( $base_url )
 		{
 			$options = '<option value="">Link to an existing Scholar course…</option>';
 
+			$suggested = ScholarFindExisting( ScholarCoursePeriod( $cp['COURSE_PERIOD_ID'] ), $all_scholar_courses );
+
+			if ( $suggested && ! isset( $scholar_courses[ $suggested['id'] ] ) )
+			{
+				foreach ( $all_scholar_courses as $course )
+				{
+					if ( (int) $course['id'] === (int) $suggested['id'] )
+					{
+						$scholar_courses[ $course['id'] ] = $course['code'] . ' — ' . $course['title'];
+					}
+				}
+			}
+
 			foreach ( $scholar_courses as $id => $label )
 			{
-				$options .= '<option value="' . (int) $id . '">' . htmlspecialchars( $label ) . '</option>';
+				$is_suggested = $suggested && (int) $suggested['id'] === (int) $id;
+
+				$options .= '<option value="' . (int) $id . '"' . ( $is_suggested ? ' selected' : '' ) . '>' .
+					htmlspecialchars( $label ) . ( $is_suggested ? ' (looks like this one)' : '' ) . '</option>';
 			}
 
 			$select = '<form action="' . URLEscape( $url . '&scholar_action=link' ) . '" method="POST" style="display:inline">' .
@@ -584,6 +637,8 @@ function _scholarCoursesSection( $base_url )
 
 	DrawHeader(
 		'Course periods of ' . FormatSyear( UserSyear(), Config( 'SCHOOL_SYEAR_OVER_2_YEARS' ) ),
+		( $unlinked && $all_scholar_courses ? '<a href="' . URLEscape( $base_url . '&section=courses&scholar_action=match_all' ) . '">' .
+			'Link existing Scholar courses automatically</a> | ' : '' ) .
 		( $unlinked ? '<a href="' . URLEscape( $base_url . '&section=courses&scholar_action=create_all' ) . '">' .
 			'Create and link all ' . $unlinked . ' unlinked course periods</a> | ' : '' ) .
 		'<a href="' . URLEscape( $base_url . '&section=courses&scholar_action=sync' ) . '">Sync everything now</a>'
