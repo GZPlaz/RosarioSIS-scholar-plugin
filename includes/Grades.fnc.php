@@ -66,11 +66,12 @@ function ScholarLocalDate( $iso )
  *
  * @throws ScholarApiException
  *
- * @return array [ 'assignments' => created, 'grades' => written, 'kept' => manual grades left alone ]
+ * @return array [ 'assignments' => created, 'grades' => written, 'kept' => manual grades left alone,
+ *               'removed' => grades taken back because their attempt was deleted in Scholar ]
  */
 function ScholarSyncGrades( $course_period_id )
 {
-	$stats = [ 'assignments' => 0, 'grades' => 0, 'kept' => 0 ];
+	$stats = [ 'assignments' => 0, 'grades' => 0, 'kept' => 0, 'removed' => 0 ];
 
 	$link = ScholarLinkOf( $course_period_id );
 	$cp = ScholarCoursePeriod( $course_period_id );
@@ -94,7 +95,15 @@ function ScholarSyncGrades( $course_period_id )
 
 	foreach ( (array) $data['assessments'] as $assessment )
 	{
-		if ( empty( $assessment['results'] ) || $assessment['max_score'] <= 0 )
+		if ( empty( $assessment['results'] ) )
+		{
+			// Every attempt was deleted in Scholar: take back what this plugin wrote for them.
+			$stats['removed'] += ScholarWithdrawGrades( $course_period_id, $assessment['id'], [] );
+
+			continue;
+		}
+
+		if ( $assessment['max_score'] <= 0 )
 		{
 			continue;
 		}
@@ -110,8 +119,15 @@ function ScholarSyncGrades( $course_period_id )
 			WHERE SCHOLAR_ASSESSMENT_ID='" . (int) $assessment['id'] . "'
 			AND COURSE_PERIOD_ID='" . (int) $course_period_id . "'" );
 
+		$present = [];
+
 		foreach ( $assessment['results'] as $result )
 		{
+			if ( ! empty( $result['external_id'] ) && strpos( $result['external_id'], $student_prefix ) === 0 )
+			{
+				$present[ (int) substr( $result['external_id'], strlen( $student_prefix ) ) ] = true;
+			}
+
 			if ( ! empty( $result['needs_grading'] )
 				|| empty( $result['external_id'] )
 				|| strpos( $result['external_id'], $student_prefix ) !== 0 )
@@ -139,6 +155,8 @@ function ScholarSyncGrades( $course_period_id )
 				$stats['kept']++;
 			}
 		}
+
+		$stats['removed'] += ScholarWithdrawGrades( $course_period_id, $assessment['id'], $present );
 	}
 
 	DBUpdate( 'scholar_links', [
@@ -146,13 +164,67 @@ function ScholarSyncGrades( $course_period_id )
 		'LAST_ERROR' => '',
 	], [ 'COURSE_PERIOD_ID' => (int) $course_period_id ] );
 
-	if ( $stats['assignments'] || $stats['grades'] )
+	if ( $stats['assignments'] || $stats['grades'] || $stats['removed'] )
 	{
 		ScholarLog( 'info', $cp['TITLE'] . ': ' . $stats['assignments'] . ' assignment(s) created, ' .
-			$stats['grades'] . ' grade(s) written from Scholar.' );
+			$stats['grades'] . ' grade(s) written from Scholar' .
+			( $stats['removed'] ? ', ' . $stats['removed'] . ' withdrawn' : '' ) . '.' );
 	}
 
 	return $stats;
+}
+
+/**
+ * Take back grades whose Scholar result no longer exists (the attempt was deleted so the student
+ * can retake the test). A grade a teacher changed by hand is left, only no longer followed.
+ *
+ * @param array $present Student IDs that still have a result, as keys.
+ *
+ * @return int Grades removed from the gradebook.
+ */
+function ScholarWithdrawGrades( $course_period_id, $scholar_assessment_id, $present )
+{
+	$assignment_id = (int) DBGetOne( "SELECT ASSIGNMENT_ID FROM scholar_assignments
+		WHERE SCHOLAR_ASSESSMENT_ID='" . (int) $scholar_assessment_id . "'
+		AND COURSE_PERIOD_ID='" . (int) $course_period_id . "'" );
+
+	if ( ! $assignment_id )
+	{
+		return 0;
+	}
+
+	$written = DBGet( "SELECT STUDENT_ID,POINTS FROM scholar_grades WHERE ASSIGNMENT_ID='" . $assignment_id . "'" );
+
+	$removed = 0;
+
+	foreach ( (array) $written as $row )
+	{
+		if ( isset( $present[ (int) $row['STUDENT_ID'] ] ) )
+		{
+			continue;
+		}
+
+		$current = DBGet( "SELECT POINTS FROM gradebook_grades
+			WHERE STUDENT_ID='" . (int) $row['STUDENT_ID'] . "'
+			AND ASSIGNMENT_ID='" . $assignment_id . "'
+			AND COURSE_PERIOD_ID='" . (int) $course_period_id . "'" );
+
+		if ( ! empty( $current[1] ) && $current[1]['POINTS'] !== null && $current[1]['POINTS'] !== ''
+			&& abs( (float) $current[1]['POINTS'] - (float) $row['POINTS'] ) < 0.005 )
+		{
+			DBQuery( "DELETE FROM gradebook_grades
+				WHERE STUDENT_ID='" . (int) $row['STUDENT_ID'] . "'
+				AND ASSIGNMENT_ID='" . $assignment_id . "'
+				AND COURSE_PERIOD_ID='" . (int) $course_period_id . "'" );
+
+			$removed++;
+		}
+
+		DBQuery( "DELETE FROM scholar_grades
+			WHERE ASSIGNMENT_ID='" . $assignment_id . "' AND STUDENT_ID='" . (int) $row['STUDENT_ID'] . "'" );
+	}
+
+	return $removed;
 }
 
 /**

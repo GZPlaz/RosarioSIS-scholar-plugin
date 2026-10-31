@@ -2,9 +2,12 @@
 /**
  * Background synchronisation.
  *
- * Runs at most every SYNC_MINUTES, either after a page has been sent to the browser (no waiting
- * for users) or from cron.php. One run: handle a new default school year, then for every active
- * link of the default school year push the roster and pull the grades.
+ * Grades normally arrive the moment they change: Scholar calls webhook.php (see Webhook.fnc.php).
+ * This file is the safety net and the roster side:
+ * - once a minute at most, ask Scholar for the list of changes (ScholarPollChanges());
+ * - every SYNC_MINUTES, a full sync: handle a new default school year, then for every active
+ *   link of the default school year push the roster and pull the grades.
+ * Both run after a page has been sent to the browser (no waiting for users), or from cron.php.
  *
  * @package Scholar plugin
  */
@@ -48,9 +51,24 @@ function ScholarSyncAll()
 
 			try
 			{
-				ScholarPushRoster( $link['COURSE_PERIOD_ID'] );
+				// Not while a webhook is copying this same course.
+				$course_lock = ScholarLock( 'cp' . (int) $link['COURSE_PERIOD_ID'], 20 );
 
-				$stats = ScholarSyncGrades( $link['COURSE_PERIOD_ID'] );
+				if ( ! $course_lock )
+				{
+					continue;
+				}
+
+				try
+				{
+					ScholarPushRoster( $link['COURSE_PERIOD_ID'] );
+
+					$stats = ScholarSyncGrades( $link['COURSE_PERIOD_ID'] );
+				}
+				finally
+				{
+					ScholarUnlock( $course_lock );
+				}
 
 				$summary['grades'] += $stats['grades'];
 				$summary['assignments'] += $stats['assignments'];
@@ -89,7 +107,7 @@ function ScholarSyncAll()
 }
 
 /**
- * Called on every page: schedule a background sync when one is due.
+ * Called on every page: schedule a background poll / sync when one is due.
  *
  * @param bool $force Sync at the end of this request whatever the interval (schedule changes).
  */
@@ -104,23 +122,26 @@ function ScholarMaybeSync( $force = false )
 
 	$interval = max( 1, (int) ScholarSetting( 'SYNC_MINUTES' ) ) * 60;
 
-	$due = time() - (int) ScholarSetting( 'LAST_SYNC' ) >= $interval
+	$full = $force
+		|| time() - (int) ScholarSetting( 'LAST_SYNC' ) >= $interval
 		|| (int) ScholarSetting( 'LAST_SYEAR' ) !== ScholarDefaultSyear();
 
-	if ( ! $force && ! $due )
+	$poll = time() - (int) ScholarSetting( 'LAST_POLL' ) >= SCHOLAR_POLL_SECONDS;
+
+	if ( ! $full && ! $poll )
 	{
 		return;
 	}
 
 	$scheduled = true;
 
-	register_shutdown_function( 'ScholarRunAfterResponse' );
+	register_shutdown_function( 'ScholarRunAfterResponse', $poll, $full );
 }
 
 /**
- * Shutdown function: send the page to the browser first, then sync.
+ * Shutdown function: send the page to the browser first, then poll and/or sync.
  */
-function ScholarRunAfterResponse()
+function ScholarRunAfterResponse( $poll = false, $full = true )
 {
 	if ( function_exists( 'fastcgi_finish_request' ) )
 	{
@@ -133,7 +154,17 @@ function ScholarRunAfterResponse()
 
 	try
 	{
-		ScholarSyncAll();
+		ScholarAutoConnect();
+
+		if ( $poll )
+		{
+			ScholarPollChanges();
+		}
+
+		if ( $full )
+		{
+			ScholarSyncAll();
+		}
 	}
 	catch ( Throwable $e )
 	{

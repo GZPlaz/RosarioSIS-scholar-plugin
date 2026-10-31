@@ -33,6 +33,10 @@ function ScholarSetting( $key, $value = null )
 		'LAST_SYNC' => '0',
 		'LAST_SYEAR' => '',
 		'CRON_KEY' => '',
+		'CALLBACK_URL' => '', // address Scholar calls instead of this site's own webhook.php
+		'WEBHOOK_SECRET' => '', // shared with Scholar, signs its requests
+		'WEBHOOK_URL' => '',
+		'LAST_EVENT' => '', // newest Scholar change handled by polling
 	];
 
 	$title = 'SCHOLAR_' . $key;

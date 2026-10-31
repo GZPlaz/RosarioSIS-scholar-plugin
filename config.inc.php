@@ -110,9 +110,56 @@ if ( $scholar_action && AllowEdit() )
 					ScholarSetting( 'ID_PREFIX', preg_replace( '/[^a-z0-9_-]/', '', strtolower( $posted['ID_PREFIX'] ) ) );
 				}
 
+				if ( isset( $posted['CALLBACK_URL'] ) )
+				{
+					$callback = trim( $posted['CALLBACK_URL'] );
+
+					if ( $callback !== '' && ( ! filter_var( $callback, FILTER_VALIDATE_URL ) || ! preg_match( '#^https?://#i', $callback ) ) )
+					{
+						$error[] = 'The address Scholar uses to reach RosarioSIS must be a full URL starting with https:// (or http://).';
+					}
+					else
+					{
+						ScholarSetting( 'CALLBACK_URL', $callback );
+					}
+				}
+
 				if ( empty( $error ) )
 				{
 					$note[] = button( 'check' ) . '&nbsp;' . _( 'The plugin configuration has been modified.' );
+
+					if ( ScholarConfigured() )
+					{
+						// Connect (or reconnect) the instant updates with the settings just saved.
+						try
+						{
+							ScholarRegisterWebhook();
+						}
+						catch ( ScholarApiException $e )
+						{
+							$warning[] = 'Instant updates are not connected yet: ' . htmlspecialchars( $e->getMessage(), ENT_QUOTES );
+						}
+					}
+				}
+
+				break;
+
+			case 'connect':
+
+				$address = ScholarRegisterWebhook();
+
+				list( $reached, $reason ) = ScholarTestWebhook();
+
+				if ( $reached )
+				{
+					$note[] = button( 'check' ) . '&nbsp;Instant updates are on: Scholar reached ' . htmlspecialchars( $address ) . '.';
+				}
+				else
+				{
+					$warning[] = 'Scholar was told to use ' . htmlspecialchars( $address ) . ' but could not get through (' .
+						htmlspecialchars( $reason ) . '). Grades still arrive every ' . (int) ScholarSetting( 'SYNC_MINUTES' ) .
+						' minutes. If RosarioSIS asks for a sign-in on that address, or Scholar can only reach this server another way, ' .
+						'enter the address Scholar should use below. See "Instant updates" in the plugin README.';
 				}
 
 				break;
@@ -182,10 +229,12 @@ if ( $scholar_action && AllowEdit() )
 				if ( $cp_id )
 				{
 					ScholarPushRoster( $cp_id );
-					$stats = ScholarSyncGrades( $cp_id );
+					$stats = ScholarSyncCourseGrades( $cp_id );
 				}
 				else
 				{
+					ScholarPollChanges();
+
 					$stats = ScholarSyncAll();
 				}
 
@@ -370,6 +419,14 @@ function _scholarSettingsSection( $base_url )
 		TextInput( ScholarIdPrefix(), 'scholar[ID_PREFIX]', 'ID prefix in Scholar', 'size=12 maxlength=20', false ) ) .
 		'<br /><span class="legend-gray">Students appear in Scholar as ' . ScholarIdPrefix() . ':student:ID. Change it only if two RosarioSIS sites share one Scholar.</span></td></tr>';
 
+	echo '<tr><td>' . TextInput(
+		ScholarSetting( 'CALLBACK_URL' ),
+		'scholar[CALLBACK_URL]',
+		'Address Scholar uses to reach RosarioSIS (optional)',
+		'size=50 placeholder="' . AttrEscape( ScholarSetting( 'CALLBACK_URL' ) === '' ? ScholarWebhookAddress() : 'https://rosariosis.example/plugins/Scholar/webhook.php' ) . '"',
+		false
+	) . '<br /><span class="legend-gray">Leave empty to use this site\'s own address (shown in grey). Change it only if Scholar must reach RosarioSIS another way, for example through a private network address.</span></td></tr>';
+
 	echo '</table>';
 
 	PopTable( 'footer' );
@@ -380,9 +437,35 @@ function _scholarSettingsSection( $base_url )
 	{
 		echo ' <input type="button" value="' . AttrEscape( 'Test the connection' ) .
 			'" class="onclick-ajax-link" data-link="' . URLEscape( $base_url . '&section=settings&scholar_action=test' ) . '" />';
+		echo ' <input type="button" value="' . AttrEscape( 'Connect instant updates' ) .
+			'" class="onclick-ajax-link" data-link="' . URLEscape( $base_url . '&section=settings&scholar_action=connect' ) . '" />';
 	}
 
 	echo '</div></form>';
+
+	// Instant updates.
+	echo '<br />';
+
+	PopTable( 'header', 'Instant updates' );
+
+	list( $level, $text ) = ScholarWebhookStatus();
+
+	echo '<p>' . ( $level === 'ok' ? button( 'check' ) : ( $level === 'warn' ? button( 'x' ) : '' ) ) . '&nbsp;' .
+		htmlspecialchars( $text ) . '</p>';
+
+	echo '<p>Whenever a grade changes in Scholar (a test is submitted or finished grading, an answer key is corrected, ' .
+		'a score is changed, an answer sheet is scanned), Scholar tells this site right away and the gradebook is updated ' .
+		'within seconds. Nothing needs to be opened or clicked. If an update is missed, the plugin asks Scholar for it ' .
+		'within a minute.</p>';
+
+	$poll = (int) ScholarSetting( 'LAST_POLL' );
+	$sync = (int) ScholarSetting( 'LAST_SYNC' );
+
+	echo '<p class="legend-gray">Address Scholar calls: ' . htmlspecialchars( ScholarSetting( 'WEBHOOK_URL' ) ?: ScholarWebhookAddress() ) .
+		'<br />Last check for missed changes: ' . ( $poll ? ScholarAgo( $poll ) : 'never' ) .
+		'<br />Last full sync: ' . ( $sync ? ScholarAgo( $sync ) : 'never' ) . '</p>';
+
+	PopTable( 'footer' );
 
 	// Cron.
 	echo '<br />';
@@ -391,12 +474,12 @@ function _scholarSettingsSection( $base_url )
 
 	$minutes = (int) ScholarSetting( 'SYNC_MINUTES' );
 
-	echo '<p>Grades and rosters are synced in the background at most every ' . $minutes .
-		' minute(s), right after someone loads a RosarioSIS page, so nobody waits for it.</p>';
+	echo '<p>A full sync (rosters and every grade) runs in the background at most every ' . $minutes .
+		' minute(s), right after someone loads a RosarioSIS page, so nobody waits for it. Missed changes are checked every minute the same way.</p>';
 
-	echo '<p>To sync even when nobody uses RosarioSIS (nights, holidays), add a cron job on the server, from the RosarioSIS folder:</p>';
+	echo '<p>To keep this going when nobody uses RosarioSIS (nights, holidays), or if the instant updates cannot reach this site, add a cron job on the server. It is cheap: most runs only ask Scholar for new changes.</p>';
 
-	echo '<pre>*/' . max( 5, $minutes ) . ' * * * * php ' . htmlspecialchars( __DIR__ . '/cron.php' ) . '</pre>';
+	echo '<pre>* * * * * php ' . htmlspecialchars( __DIR__ . '/cron.php' ) . '</pre>';
 
 	$key = ScholarSetting( 'CRON_KEY' );
 

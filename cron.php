@@ -1,6 +1,10 @@
 <?php
 /**
- * Scholar plugin: scheduled sync.
+ * Scholar plugin: scheduled sync (the safety net behind the instant updates).
+ *
+ * Every run asks Scholar for changes it could not deliver; the full sync runs when it is due
+ * (every "Sync every" minutes), so running this every minute is fine. Add the word "full"
+ * to force a full sync.
  *
  * Command line (recommended), from any folder:
  *     php /path/to/rosariosis/plugins/<plugin folder>/cron.php
@@ -58,6 +62,24 @@ if ( ! $scholar_cli )
 if ( ! ScholarConfigured() )
 {
 	exit( "Scholar is not configured yet (address and token).\n" );
+}
+
+// Missed changes first (cheap), then the full sync when it is due.
+$poll = ScholarPollChanges();
+
+if ( $poll !== false && $poll['events'] )
+{
+	echo date( 'Y-m-d H:i:s' ) . ' Scholar changes: ' . $poll['events'] . ' change(s) in ' . $poll['courses'] .
+		' course(s), ' . $poll['grades'] . ' grade(s) written, ' . $poll['errors'] . " error(s).\n";
+}
+
+$interval = max( 1, (int) ScholarSetting( 'SYNC_MINUTES' ) ) * 60;
+
+if ( ! in_array( 'full', isset( $argv ) ? $argv : [], true )
+	&& time() - (int) ScholarSetting( 'LAST_SYNC' ) < $interval
+	&& (int) ScholarSetting( 'LAST_SYEAR' ) === ScholarDefaultSyear() )
+{
+	exit( $poll !== false && $poll['errors'] ? 1 : 0 );
 }
 
 $summary = ScholarSyncAll();

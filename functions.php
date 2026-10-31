@@ -9,7 +9,10 @@
  * @package Scholar plugin
  */
 
-define( 'SCHOLAR_PLUGIN_VERSION', '1.1.0' );
+define( 'SCHOLAR_PLUGIN_VERSION', '2.0.0' );
+
+// The most often the plugin asks Scholar for missed changes (the webhook normally makes this unnecessary).
+define( 'SCHOLAR_POLL_SECONDS', 60 );
 
 // The plugin works from any folder name (RosarioSIS names a plugin after its folder).
 require_once __DIR__ . '/includes/Client.php';
@@ -17,6 +20,7 @@ require_once __DIR__ . '/includes/Settings.fnc.php';
 require_once __DIR__ . '/includes/Courses.fnc.php';
 require_once __DIR__ . '/includes/Grades.fnc.php';
 require_once __DIR__ . '/includes/Year.fnc.php';
+require_once __DIR__ . '/includes/Webhook.fnc.php';
 require_once __DIR__ . '/includes/Sync.fnc.php';
 
 /**
